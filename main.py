@@ -118,7 +118,7 @@ for i in range(df_tsne.shape[0]):
         alpha=0.7
     )
 
- plt.title('TransE embedding relation vectors (TSNE)', fontsize=15)
+plt.title('TransE embedding entity vectors (TSNE)', fontsize=15)
 plt.xlabel('d 1', fontsize=12)
 plt.ylabel('d 2', fontsize=12)
 plt.legend(title='Category', loc='best')
