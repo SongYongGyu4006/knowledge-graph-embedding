@@ -74,7 +74,6 @@ complex_embeddings = model.entity_representations[0](entity_ids).detach().cpu().
 
 # 복소수를 실수로 변환 (Real part와 Imaginary part를 결합)
 # 복소수 [a + bi]를 [a, b] 형태의 실수 벡터로 변환
-import numpy as np
 real_part = np.real(complex_embeddings)
 imag_part = np.imag(complex_embeddings)
 entity_embeddings = np.concatenate([real_part, imag_part], axis=-1)
