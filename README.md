@@ -19,7 +19,54 @@ conda activate KGE
 ```
 python main.py
 ```
+---
+# RotatE1.0.0!!
+RotatE 모델 또한 구현을 완료했습니다. 라이브러리에 내장된 모델을 사용하기 때문에 TransE 구현과 큰 차이는 없었으나, TransE는 거리, 즉 벡터를 최소화하는 방식이였기에 norm 옵션이 필요했지만 RotatE는 복소수 공간에서 회전시키기 때문에 norm 옵션이 필요하지 않습니다. TransE1.1.0 버전에서 수정하였기에 나머지는 같은 기능을 제공합니다.
+```
+result = pipeline(
+    dataset='nations',
+    model='RotatE', <-- 모델명만 변경
+    model_kwargs=dict(
+        embedding_dim=50,
+        # scoring_fct_norm=1,  <-- 이 옵션이 필요하지 않음.
+    ),
+    training_kwargs=dict(
+        num_epochs=100,
+        batch_size=64,
+        use_tqdm=True,
+    ),
+    optimizer_kwargs=dict(lr=1e-2),
+    device='cpu', # 안전하게 CPU로 진행
+)
+```
 
+실행결과, 성능 평가 지표인 MRR과 Hits@10의 값이 기존 TrnasE와 차이가 있었습니다. TrnasE의 경우 MRR은 약 0.45, Hits@10은 약 0.97 이었지만 RotatE는 MRR이 0.60, Hits@10이 0.98로 올랐습니다. MRR에서 큰 차이가 나타났습니다. 분명 시각화환 3D 산점도도 차이가 있을텐데.. 막눈인 제가 봤을 땐 큰 차이를 못느끼겠더라구요...ㅎ 데이터셋이 단순한 이유이기도 할 것 같습니다.
+
+---
+# TransE1.1.0!!
+2차원 시각화에서 3차원 시각화로 변경하였습니다. 또한, predict_target() 함수를 사용하여 brazil이 외교관을 추방할 가능성이 높은 국가들을 찾아보도록 했습니다. 
+
+결과는 직접 실행해보기~
+```
+# 데이터셋에 들어있는 실제 관계 이름들 확인 
+relations = list(result.training.relation_to_id.keys())
+# 'diplomatic'이 포함된 실제 관계 이름을 찾기
+target_rel = [r for r in relations if 'diplom' in r.lower()][0] 
+print(f"예측에 사용할 실제 관계 이름: {target_rel}")
+
+# 2. 찾은 정확한 이름을 넣어서 예측 실행
+df_tail = pykeen.predict.predict_target(
+    model=result.model,
+    head="brazil",
+    relation=target_rel, # 'diplomatic' 대신 찾은 변수 사용
+    triples_factory=result.training,
+).df
+
+# 결과 상위 10개 출력
+print(df_tail.head(10))
+```
+
+---
 # TransE1.0.0!!
 아기다리 고기다리 TransE1.0.0을 샘플데이터에 학습 시키고 지식 그래프를 차원 축소하여 시각화까지 마쳤습니다.
 ### 모델정의
@@ -54,6 +101,5 @@ result = pipeline(
 ### 관계 임베딩 시각화
 <img width="1112" height="976" alt="image" src="https://github.com/user-attachments/assets/ce29ba21-5d68-41bc-ab66-cf92c9ba2d47" />
 
-
-
+---
 
