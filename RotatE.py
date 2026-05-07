@@ -9,28 +9,29 @@ from sklearn.manifold import TSNE
 from pykeen.pipeline import pipeline
 from sklearn.decomposition import PCA
 import pykeen.predict
-from pykeen.datasets import Nations # 샘플 데이터셋 추후 민석이 구해온 데이터셋으로 대체 예정
+from pykeen.datasets import FB15k237 # 샘플 데이터셋 추후 민석이 구해온 데이터셋으로 대체 예정
 
 
 OUTPUT = 'rotatee_result'
 os.makedirs(OUTPUT, exist_ok=True) # OUTPUT 디렉터리생성
 
-device = torch.device("cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"현재 사용 중인 장치: {device}")
 
 print("RotateE 모델 학습 및 시각화 시작")
 
 # pipeline 함수로 모델 학습 및 평가를 수행(자동으로 파라미터 설정해줌)
 result = pipeline(
-    dataset='nations',
+    dataset='FB15k237',
     model='Rotate',
     # 모델 설정
     model_kwargs=dict(
-        embedding_dim=50, # 임베딩 차원
+        embedding_dim=500, # 임베딩 차원
     ),
     device=device,
     # 학습 설정
     training_kwargs=dict(
-        num_epochs=100, # 에폭 수
+        num_epochs=700, # 에폭 수
         batch_size=64, # 배치 크기
         use_tqdm=True,
     ),
@@ -153,36 +154,42 @@ relation_embeddings = model.relation_representations[0](relation_ids).detach().c
 #     plt.savefig(os.path.join(OUTPUT, 'rotatee_relation_pca.png'))
 #     plt.show()
 
-# --- 3차원 시각화 (Plotly 사용) ---
+# 3. 3D 시각화 (Plotly 사용) - 샘플링 추가
+# -------------------------------------------------------------
 print("3차원 차원 축소 중...")
+# FB15k237은 14000개가 넘으므로 시각화 시 브라우저 과부하 방지를 위해 랜덤 샘플링
+SAMPLE_SIZE = min(1000, len(entity_names))
+np.random.seed(42)
+sample_indices = np.random.choice(len(entity_names), SAMPLE_SIZE, replace=False)
+
+sampled_embeddings = entity_embeddings[sample_indices]
+sampled_entity_names = [entity_names[i] for i in sample_indices]
+
 tsne_3d = TSNE(
-    n_components=3, 
-    random_state=42, 
-    perplexity=min(30, len(entity_names)-1),
+    n_components=3,
+    random_state=42,
+    perplexity=min(30, len(sampled_entity_names)-1),
     max_iter=1000
 )
-X_3d = tsne_3d.fit_transform(entity_embeddings)
+X_3d = tsne_3d.fit_transform(sampled_embeddings)
 
 # DataFrame 생성 및 개체 이름 매핑
 df_3d = pd.DataFrame(X_3d, columns=['x', 'y', 'z'])
-df_3d['entity'] = entity_names
+df_3d['entity'] = sampled_entity_names
 
-# 3. Plotly를 이용한 3D 산점도 생성
+# Plotly를 이용한 3D 산점도 생성
 fig = px.scatter_3d(
-    df_3d, 
+    df_3d,
     x='x', y='y', z='z',
-    text='entity',      # 점 위에 마우스를 올리면 이름이 나옴
-    color='x',          # 좌표값에 따라 색상을 입혀 입체감을 높임
-    title='RotateE Entity Embeddings (3D t-SNE)',
+    text='entity',
+    color='x',
+    title='RotateE Entity Embeddings (3D t-SNE) - Sampled',
     labels={'x': 'TSNE-1', 'y': 'TSNE-2', 'z': 'TSNE-3'}
 )
 
-# 4. 점 크기 및 라벨 설정
-fig.update_traces(marker=dict(size=5))
+fig.update_traces(marker=dict(size=5), textposition='top center')
 fig.update_layout(margin=dict(l=0, r=0, b=0, t=40))
 
-# 5. 그래프 출력 및 HTML 저장
-fig.show()
 fig.write_html(os.path.join(OUTPUT, 'rotatee_3d_visualization.html'))
 print(f"3D 시각화 완료: {OUTPUT}/rotatee_3d_visualization.html")
 
@@ -195,13 +202,29 @@ relations = list(result.training.relation_to_id.keys())
 target_rel = [r for r in relations if 'diplom' in r.lower()][0] 
 print(f"예측에 사용할 실제 관계 이름: {target_rel}")
 
+# --- 링크 예측 테스트 (Link Prediction) ---
+print("\n--- 링크 예측 테스트 (Link Prediction) ---")
+
+# 데이터셋에 들어있는 실제 관계 이름들 확인
+relations = list(result.training.relation_to_id.keys())
+# 'diplom'이 포함된 관계가 있는지 찾고, 없으면 데이터셋의 첫 번째 관계를 사용
+diplom_rels = [r for r in relations if 'diplom' in r.lower()]
+target_rel = diplom_rels[0] if diplom_rels else relations[0]
+print(f"예측에 사용할 실제 관계 이름: {target_rel}")
+
 # 2. 찾은 정확한 이름을 넣어서 예측 실행
+# 'brazil' 엔티티가 있는지 확인하고, 없으면 데이터셋의 첫 번째 엔티티 사용
+target_head = "brazil" if "brazil" in entity_names else entity_names[0]
+print(f"예측에 사용할 Head 엔티티: {target_head}")
+
+# 예측 실행
 df_tail = pykeen.predict.predict_target(
     model=result.model,
-    head="brazil",
-    relation=target_rel, # 'diplomatic' 대신 찾은 변수 사용
+    head=target_head,
+    relation=target_rel,
     triples_factory=result.training,
 ).df
 
 # 결과 상위 10개 출력
+print(f"\n[{target_head}] ---({target_rel})---> [?] 에 대한 꼬리(Tail) 예측 결과:")
 print(df_tail.head(10))
