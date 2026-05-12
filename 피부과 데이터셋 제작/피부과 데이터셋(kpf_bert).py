@@ -4,13 +4,11 @@ import os
 import csv
 
 # ==========================================
-# 1. 경로 설정 (이 부분만 정확히 수정하세요)
-# ==========================================
-# JSON 파일들이 들어있는 폴더 경로
-folder_path = r"C:\Users\MINJAE\Downloads\download\skin_data" 
+# JSON 파일들이 들어있는 폴더 경로 (현재 파이썬 파일 위치의 'skin_data' 폴더)
+folder_path = "folder_path = "./피부과 데이터셋 제작"" 
 
-# 결과가 저장될 파일 경로 (파일명 result.csv를 꼭 포함하세요)
-output_file = r"C:\Users\MINJAE\Downloads\download\skin_data\result.csv" 
+# 결과가 저장될 파일 경로 (현재 폴더에 바로 생성)
+output_file = "./result.csv" 
 
 def fast_triple_extractor(json_data):
     """JSON 데이터에서 Head, Relation, Tail을 추출하는 함수"""
@@ -46,8 +44,9 @@ def fast_triple_extractor(json_data):
 # ==========================================
 all_triples = []
 
+# 경로 존재 여부 확인 전, 폴더가 없다면 메시지 출력
 if not os.path.exists(folder_path):
-    print(f"❌ 오류: '{folder_path}' 경로를 찾을 수 없습니다. 폴더 경로를 다시 확인해주세요.")
+    print(f"❌ 오류: '{folder_path}' 폴더를 찾을 수 없습니다. 저장소 내에 'skin_data' 폴더가 있는지 확인해주세요.")
 else:
     # 폴더 내 모든 .json 파일 목록 가져오기
     file_list = [f for f in os.listdir(folder_path) if f.endswith('.json')]
@@ -55,7 +54,6 @@ else:
 
     for file_name in file_list:
         file_full_path = os.path.join(folder_path, file_name)
-        # encoding='utf-8-sig'를 사용하여 BOM 오류를 원천 차단합니다.
         with open(file_full_path, 'r', encoding='utf-8-sig') as f:
             try:
                 data = json.load(f)
