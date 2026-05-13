@@ -3,37 +3,35 @@ import re
 import os
 import csv
 
-# ==========================================
-# JSON 파일들이 들어있는 폴더 경로 (현재 파이썬 파일 위치의 'skin_data' 폴더)
-folder_path = "folder_path = "./피부과 데이터셋 제작"" 
-
-# 결과가 저장될 파일 경로 (현재 폴더에 바로 생성)
-output_file = "./result.csv" 
+base_path = os.getcwd() 
+folder_path = os.path.join(base_path, "피부과 데이터셋 제작")
+output_file = os.path.join(base_path, "result.csv")
 
 def fast_triple_extractor(json_data):
     """JSON 데이터에서 Head, Relation, Tail을 추출하는 함수"""
+    # 데이터가 리스트 형태일 경우를 대비한 안전장치
+    if isinstance(json_data, list):
+        json_data = json_data[0] if len(json_data) > 0 else {}
+
     question = json_data.get("question", "")
     answer = json_data.get("answer", "")
     
     if not question or not answer:
         return []
 
-    # 정답(Head) 정제: "2) 피부묘기증 (dermographism)" -> "피부묘기증"
-    head = re.sub(r'^[0-9]+\)\s*', '', answer).split(' (')[0].strip()
+    # 정답(Head) 정제
+    head = re.sub(r'^[0-9]+\)\s*', '', str(answer)).split(' (')[0].strip()
     
-    # 단순 규칙 기반 엔티티 추출 (조사 및 특수문자 제거)
     words = question.split()
     triples = []
     
     for word in words:
-        # 조사 제거 (한국어 특성 반영)
+        # 조사 및 특수문자 제거
         clean_word = re.sub(r'(은|는|이|가|을|를|에|으로|에서|부터|하고|요|다)$', '', word)
-        # 특수문자 제거
         clean_word = re.sub(r'[^\w\s]', '', clean_word)
         
-        # 2글자 이상이며, 숫자+단위(32세, 4주 등)가 아닌 단어만 추출
         if len(clean_word) >= 2 and not re.match(r'^[0-9]+(세|주|번|월)', clean_word):
-            # 관계 설정: 증상 관련 키워드가 포함되면 has_symptom으로 분류
+            # 중복 데이터 방지를 위해 set 등을 사용할 수 있으나 일단 리스트 유지
             rel = "has_symptom" if any(x in clean_word for x in ['진', '반', '통', '염', '증', '상', '질']) else "related_to"
             triples.append([head, rel, clean_word])
             
@@ -44,35 +42,37 @@ def fast_triple_extractor(json_data):
 # ==========================================
 all_triples = []
 
-# 경로 존재 여부 확인 전, 폴더가 없다면 메시지 출력
 if not os.path.exists(folder_path):
-    print(f"❌ 오류: '{folder_path}' 폴더를 찾을 수 없습니다. 저장소 내에 'skin_data' 폴더가 있는지 확인해주세요.")
+    print(f"❌ 오류: '{folder_path}' 폴더를 찾을 수 없습니다.")
 else:
-    # 폴더 내 모든 .json 파일 목록 가져오기
     file_list = [f for f in os.listdir(folder_path) if f.endswith('.json')]
-    print(f"📂 총 {len(file_list)}개의 파일을 찾았습니다. 분석을 시작합니다...")
+    print(f"📂 총 {len(file_list)}개의 파일을 찾았습니다. 분석 중...")
 
     for file_name in file_list:
         file_full_path = os.path.join(folder_path, file_name)
-        with open(file_full_path, 'r', encoding='utf-8-sig') as f:
-            try:
+        try:
+            # utf-8-sig는 BOM 제거를 위해 사용 (유지)
+            with open(file_full_path, 'r', encoding='utf-8-sig') as f:
                 data = json.load(f)
                 extracted = fast_triple_extractor(data)
                 all_triples.extend(extracted)
-            except Exception as e:
-                print(f"⚠️ 파일 읽기 오류 ({file_name}): {e}")
+        except Exception as e:
+            print(f"⚠️ 파일 읽기 오류 ({file_name}): {e}")
 
-    # 3. 결과 저장 (CSV 파일 생성)
+    # 3. 결과 저장 (중복 생성 방지를 위해 'w' 모드로 덮어쓰기)
     if all_triples:
         try:
+            # 중복 행 제거 (필요 시)
+            unique_triples = list(set(tuple(x) for x in all_triples))
+            
             with open(output_file, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f)
-                writer.writerow(["Head", "Relation", "Tail"]) # 엑셀 헤더
-                writer.writerows(all_triples)
-            print(f"\n✅ 작업 완료! 결과가 저장되었습니다.")
-            print(f"📍 저장 위치: {output_file}")
-            print(f"📊 추출된 총 트리플 개수: {len(all_triples)}")
+                writer.writerow(["Head", "Relation", "Tail"])
+                writer.writerows(unique_triples)
+            
+            print(f"\n✅ 작업 완료! 저장 위치: {output_file}")
+            print(f"📊 추출된 고유 트리플 개수: {len(unique_triples)}")
         except PermissionError:
-            print(f"❌ 오류: '{output_file}'이(가) 이미 열려있습니다. 엑셀을 닫고 다시 실행해주세요.")
+            print(f"❌ 오류: '{output_file}'이 열려있습니다. 파일을 닫고 재실행하세요.")
     else:
-        print("ℹ️ 추출된 데이터가 없습니다. JSON 파일의 형식을 확인해주세요.")
+        print("ℹ️ 추출된 데이터가 없습니다.")
